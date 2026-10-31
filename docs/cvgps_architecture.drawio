@@ -1,0 +1,130 @@
+<mxfile host="app.diagrams.net" modified="2026-10-31T06:45:00.000Z" agent="CVGPS-Architect" version="24.7.0" type="device">
+  <diagram id="cvgps-er-arch" name="CVGPS Complete ER &amp; Indexing Architecture">
+    <mxGraphModel dx="1850" dy="1150" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1920" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title Banner -->
+        <mxCell id="title" value="CVGPS (cvgps_pro) — Complete BCNF Relational Schema, Primary/Secondary/Foreign Keys, Triggers, Procedures &amp; B-Tree Indexes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0f172a;strokeColor=#1e293b;fontColor=#f8fafc;fontSize=15;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1800" height="45" as="geometry" />
+        </mxCell>
+
+        <!-- Layer 1: UI + Flask + Grant Boundary -->
+        <mxCell id="ui_box" value="&lt;b&gt;1. Minimalist Web Console (frontend/)&lt;/b&gt;&lt;br&gt;index.html + app.js&lt;br&gt;• Pass Issue Form • Gate Terminal • Live Views • SQLSTATE 45000 Banner" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;fontColor=#1e3a8a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="40" y="85" width="420" height="75" as="geometry" />
+        </mxCell>
+
+        <mxCell id="flask_box" value="&lt;b&gt;2. Thin Python Flask Gateway (backend/app.py + db.py + errors.py)&lt;/b&gt;&lt;br&gt;Zero Business Logic · Connects strictly as MySQL user &lt;b&gt;gp_app&lt;/b&gt;&lt;br&gt;• Executes ONLY: CALL sp_* and SELECT * FROM vw_*" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0c4a6e;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="520" y="85" width="500" height="75" as="geometry" />
+        </mxCell>
+
+        <mxCell id="procs_box" value="&lt;b&gt;3. ACID Stored Procedures (SQL SECURITY DEFINER) + Event Scheduler&lt;/b&gt;&lt;br&gt;• sp_register_visitor • sp_issue_gate_pass (FOR UPDATE) • sp_process_gate_checkin (FOR UPDATE)&lt;br&gt;• sp_process_gate_checkout (FOR UPDATE) • sp_revoke_gate_pass • sp_blacklist_visitor • evt_expire_stale_passes (1m)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;fontColor=#78350f;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1080" y="85" width="760" height="75" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_ui_flask" value="JSON REST" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#2563eb;" edge="1" parent="1" source="ui_box" target="flask_box">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_flask_procs" value="GRANT EXECUTE / SELECT" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#d97706;" edge="1" parent="1" source="flask_box" target="procs_box">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- TABLE 1: departments -->
+        <mxCell id="tbl_dept" value="&lt;b&gt;departments&lt;/b&gt; (BCNF)&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; dept_id INT AUTO_INCREMENT&lt;br&gt;&lt;b&gt;UK&lt;/b&gt; dept_code VARCHAR(12) [uk_dept_code]&lt;br&gt;&lt;b&gt;UK&lt;/b&gt; dept_name VARCHAR(80) [uk_dept_name]&lt;br&gt;building_name VARCHAR(60)&lt;br&gt;floor_no INT [CHECK 0..60]" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#334155;fontColor=#0f172a;align=left;spacingLeft=8;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="210" width="300" height="130" as="geometry" />
+        </mxCell>
+
+        <!-- TABLE 2: employees -->
+        <mxCell id="tbl_emp" value="&lt;b&gt;employees (Hosts)&lt;/b&gt; (1NF..BCNF)&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; emp_id INT AUTO_INCREMENT&lt;br&gt;&lt;b&gt;UK&lt;/b&gt; emp_code VARCHAR(16) [uk_emp_code]&lt;br&gt;first_name VARCHAR(50), last_name VARCHAR(50)&lt;br&gt;&lt;b&gt;UK&lt;/b&gt; email VARCHAR(120) [uk_emp_email + REGEXP]&lt;br&gt;&lt;b&gt;UK&lt;/b&gt; phone VARCHAR(20) [uk_emp_phone + E.164]&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; dept_id -&gt; departments(dept_id) [RESTRICT]&lt;br&gt;is_active TINYINT(1)&lt;br&gt;&lt;i&gt;IDX: idx_emp_dept_active (dept_id, is_active)&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#334155;fontColor=#0f172a;align=left;spacingLeft=8;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="390" width="320" height="170" as="geometry" />
+        </mxCell>
+
+        <!-- TABLE 3: shifts -->
+        <mxCell id="tbl_shifts" value="&lt;b&gt;shifts&lt;/b&gt; (3NF/BCNF)&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; shift_id INT AUTO_INCREMENT&lt;br&gt;&lt;b&gt;UK&lt;/b&gt; shift_code VARCHAR(16) [uk_shift_code]&lt;br&gt;&lt;b&gt;UK&lt;/b&gt; shift_name VARCHAR(40) [uk_shift_name]&lt;br&gt;start_time TIME, end_time TIME" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#334155;fontColor=#0f172a;align=left;spacingLeft=8;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="610" width="300" height="115" as="geometry" />
+        </mxCell>
+
+        <!-- TABLE 4: security_guards -->
+        <mxCell id="tbl_guards" value="&lt;b&gt;security_guards&lt;/b&gt; (1NF..BCNF)&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; guard_id INT AUTO_INCREMENT&lt;br&gt;&lt;b&gt;UK&lt;/b&gt; badge_no VARCHAR(16) [uk_guard_badge]&lt;br&gt;first_name VARCHAR(50), last_name VARCHAR(50)&lt;br&gt;&lt;b&gt;UK&lt;/b&gt; phone VARCHAR(20) [uk_guard_phone]&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; shift_id -&gt; shifts(shift_id) [RESTRICT]&lt;br&gt;is_active TINYINT(1)&lt;br&gt;&lt;i&gt;IDX: idx_guard_shift (shift_id)&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#334155;fontColor=#0f172a;align=left;spacingLeft=8;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="770" width="320" height="155" as="geometry" />
+        </mxCell>
+
+        <!-- TABLE 5: checkpoints -->
+        <mxCell id="tbl_ckpt" value="&lt;b&gt;checkpoints&lt;/b&gt; (BCNF)&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; checkpoint_id INT AUTO_INCREMENT&lt;br&gt;&lt;b&gt;UK&lt;/b&gt; checkpoint_code VARCHAR(20) [uk_checkpoint_code]&lt;br&gt;checkpoint_name VARCHAR(80)&lt;br&gt;building_name VARCHAR(60), is_active TINYINT(1)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#334155;fontColor=#0f172a;align=left;spacingLeft=8;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="40" y="965" width="320" height="115" as="geometry" />
+        </mxCell>
+
+        <!-- TABLE 6: id_proof_types & sys_secrets -->
+        <mxCell id="tbl_idtypes" value="&lt;b&gt;id_proof_types&lt;/b&gt; (Lookup)&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; id_proof_type_id INT&lt;br&gt;&lt;b&gt;UK&lt;/b&gt; type_code VARCHAR(20)&lt;br&gt;type_label VARCHAR(60)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#334155;fontColor=#0f172a;align=left;spacingLeft=8;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="430" y="210" width="230" height="100" as="geometry" />
+        </mxCell>
+
+        <mxCell id="tbl_secrets" value="&lt;b&gt;sys_secrets&lt;/b&gt; (Restricted)&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; secret_key VARCHAR(40)&lt;br&gt;secret_value VARCHAR(128)&lt;br&gt;&lt;i&gt;Read only by fn_hash_id_proof&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fef2f2;strokeColor=#dc2626;fontColor=#7f1d1d;align=left;spacingLeft=8;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="680" y="210" width="220" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- TABLE 7: visitors -->
+        <mxCell id="tbl_visitors" value="&lt;b&gt;visitors&lt;/b&gt; (1NF..BCNF · Hashed ID Proofs)&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; visitor_id INT AUTO_INCREMENT&lt;br&gt;first_name VARCHAR(50), last_name VARCHAR(50)&lt;br&gt;phone VARCHAR(20), email VARCHAR(120), company_name&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; id_proof_type_id -&gt; id_proof_types [RESTRICT]&lt;br&gt;&lt;b&gt;UK&lt;/b&gt; (id_proof_type_id, id_proof_hash) [uk_visitor_id_proof]&lt;br&gt;id_proof_last4 CHAR(4) [Masked Display Only]&lt;br&gt;&lt;i&gt;IDX: idx_visitor_phone (phone)&lt;/i&gt;&lt;br&gt;&lt;i&gt;IDX: idx_visitor_name (last_name, first_name)&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#334155;fontColor=#0f172a;align=left;spacingLeft=8;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="430" y="350" width="380" height="175" as="geometry" />
+        </mxCell>
+
+        <!-- TABLE 8: vehicles -->
+        <mxCell id="tbl_vehicles" value="&lt;b&gt;vehicles&lt;/b&gt; (1NF Multi-Valued Entity)&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; vehicle_id INT AUTO_INCREMENT&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; visitor_id -&gt; visitors(visitor_id) [&lt;b&gt;ON DELETE CASCADE&lt;/b&gt;]&lt;br&gt;&lt;b&gt;UK&lt;/b&gt; registration_no VARCHAR(20) [uk_vehicle_reg]&lt;br&gt;&lt;b&gt;UK&lt;/b&gt; (visitor_id, vehicle_id) [uk_visitor_vehicle]&lt;br&gt;vehicle_type ENUM, make_model VARCHAR(60)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#334155;fontColor=#0f172a;align=left;spacingLeft=8;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="430" y="565" width="380" height="135" as="geometry" />
+        </mxCell>
+
+        <!-- TABLE 9: visitor_blacklist -->
+        <mxCell id="tbl_blacklist" value="&lt;b&gt;visitor_blacklist&lt;/b&gt; (Temporal Security Watchlist)&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; blacklist_id INT AUTO_INCREMENT&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; visitor_id -&gt; visitors(visitor_id) [&lt;b&gt;ON DELETE CASCADE&lt;/b&gt;]&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; created_by -&gt; security_guards(guard_id) [RESTRICT]&lt;br&gt;reason VARCHAR(255), severity ENUM(LOW..CRITICAL)&lt;br&gt;start_at DATETIME, end_at DATETIME [CHECK end_at &gt; start_at]&lt;br&gt;lifted_at DATETIME, lifted_reason VARCHAR(255)&lt;br&gt;&lt;i&gt;IDX: idx_bl_visitor_active (visitor_id, lifted_at, end_at, start_at)&lt;/i&gt;" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#881337;align=left;spacingLeft=8;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="430" y="740" width="380" height="165" as="geometry" />
+        </mxCell>
+
+        <!-- TABLE 10: gate_passes (Central Hub) -->
+        <mxCell id="tbl_passes" value="&lt;b&gt;gate_passes&lt;/b&gt; (Core Transactional Entity · Pessimistic Row Locking)&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; pass_id INT AUTO_INCREMENT (Clustered PK)&lt;br&gt;&lt;b&gt;UK&lt;/b&gt; pass_token BINARY(16) [uk_pass_token · UUID_TO_BIN(UUID(),1)]&lt;br&gt;&lt;b&gt;UK&lt;/b&gt; pass_code CHAR(9) [&lt;b&gt;uk_pass_code&lt;/b&gt; · 40,750x speedup const lookup]&lt;br&gt;&lt;b&gt;UK&lt;/b&gt; active_visitor_key INT STORED [&lt;b&gt;uk_gp_active_visitor&lt;/b&gt; · Partial Unique Index]&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; visitor_id -&gt; visitors(visitor_id) [ON DELETE RESTRICT]&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; host_emp_id -&gt; employees(emp_id) [ON DELETE RESTRICT]&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; (visitor_id, vehicle_id) -&gt; vehicles(visitor_id, vehicle_id) [Composite RESTRICT]&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; check_in_guard_id, check_out_guard_id -&gt; security_guards(guard_id) [RESTRICT]&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; check_in_checkpoint_id, check_out_checkpoint_id -&gt; checkpoints(checkpoint_id) [RESTRICT]&lt;br&gt;visit_purpose VARCHAR(255), valid_from DATETIME, valid_until DATETIME&lt;br&gt;status ENUM('APPROVED','ACTIVE_ON_CAMPUS','COMPLETED','EXPIRED','REVOKED')&lt;br&gt;check_in_time DATETIME, check_out_time DATETIME, is_overstay TINYINT(1)&lt;br&gt;visit_duration_min INT VIRTUAL [TIMESTAMPDIFF(MINUTE, check_in_time, check_out_time)]&lt;hr&gt;&lt;b&gt;Composite B-Tree Indexes:&lt;/b&gt;&lt;br&gt;• &lt;b&gt;idx_gp_status_checkin&lt;/b&gt; (status, check_in_time) — 1,079x speedup&lt;br&gt;• &lt;b&gt;idx_gp_host_validfrom&lt;/b&gt; (host_emp_id, valid_from) — 30.4x speedup&lt;br&gt;• &lt;b&gt;idx_gp_status_validuntil&lt;/b&gt; (status, valid_until) — 643x speedup&lt;br&gt;• &lt;b&gt;idx_gp_visitor_created&lt;/b&gt; (visitor_id, created_at)&lt;hr&gt;&lt;b&gt;Triggers Attached:&lt;/b&gt;&lt;br&gt;• BEFORE INSERT: trg_prevent_blacklisted_visitor (50001), trg_enforce_single_active_pass (50002)&lt;br&gt;• BEFORE UPDATE: trg_enforce_state_machine (50006), trg_auto_expire_overstay&lt;br&gt;• AFTER INSERT / UPDATE: trg_audit_pass_issue, trg_audit_pass_lifecycle" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0fdf4;strokeColor=#15803d;fontColor=#14532d;align=left;spacingLeft=10;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="920" y="210" width="490" height="475" as="geometry" />
+        </mxCell>
+
+        <!-- TABLE 11: access_audit_logs -->
+        <mxCell id="tbl_audit" value="&lt;b&gt;access_audit_logs&lt;/b&gt; (Immutable Append-Only Compliance Ledger)&lt;hr&gt;&lt;b&gt;PK&lt;/b&gt; log_id BIGINT AUTO_INCREMENT&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; pass_id -&gt; gate_passes(pass_id) [ON DELETE RESTRICT]&lt;br&gt;attempted_code VARCHAR(20) [Populated on DENIED rollbacks]&lt;br&gt;event_type ENUM('ISSUED','CHECKED_IN','CHECKED_OUT','EXPIRED','REVOKED','OVERSTAY_FLAGGED','DENIED')&lt;br&gt;from_status VARCHAR(20), to_status VARCHAR(20)&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; guard_id -&gt; security_guards(guard_id) [ON DELETE RESTRICT]&lt;br&gt;&lt;b&gt;FK&lt;/b&gt; checkpoint_id -&gt; checkpoints(checkpoint_id) [ON DELETE RESTRICT]&lt;br&gt;details VARCHAR(500), event_at DATETIME(3)&lt;hr&gt;&lt;b&gt;Composite B-Tree Indexes:&lt;/b&gt;&lt;br&gt;• &lt;b&gt;idx_audit_pass_time&lt;/b&gt; (pass_id, event_at) — 598x speedup&lt;br&gt;• &lt;b&gt;idx_audit_type_time&lt;/b&gt; (event_type, event_at)&lt;hr&gt;&lt;b&gt;Immutability Triggers:&lt;/b&gt;&lt;br&gt;• trg_audit_immutable_upd &amp; trg_audit_immutable_del -&gt; Errno 50009" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fefce8;strokeColor=#ca8a04;fontColor=#713f12;align=left;spacingLeft=10;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="920" y="730" width="490" height="295" as="geometry" />
+        </mxCell>
+
+        <!-- Views Box -->
+        <mxCell id="views_box" value="&lt;b&gt;4. Optimized Analytical &amp; Operational Views (Read-Only Interface for gp_app)&lt;/b&gt;&lt;hr&gt;• &lt;b&gt;vw_live_campus_occupancy&lt;/b&gt;: Joins gate_passes + visitors + employees + departments + checkpoints + guards + vehicles (Filtered via idx_gp_status_checkin)&lt;br&gt;• &lt;b&gt;vw_department_visit_analytics&lt;/b&gt;: Window Functions — RANK() OVER, DENSE_RANK() OVER, SUM() OVER (), ROW_NUMBER() OVER (PARTITION BY dept_id) for peak hour&lt;br&gt;• &lt;b&gt;vw_daily_visit_trend&lt;/b&gt;: Window Functions — SUM(daily_passes) OVER (ROWS UNBOUNDED PRECEDING) + 7-day moving AVG()&lt;br&gt;• &lt;b&gt;vw_pass_audit_trail&lt;/b&gt; &amp; &lt;b&gt;vw_pass_directory&lt;/b&gt; + 7 Lookup Views (&lt;b&gt;vw_lookup_*&lt;/b&gt;)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#7e22ce;fontColor=#3b0764;align=left;spacingLeft=10;verticalAlign=top;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1450" y="210" width="390" height="310" as="geometry" />
+        </mxCell>
+
+        <!-- Relationships -->
+        <mxCell id="fk1" value="fk_emp_dept (RESTRICT)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#475569;fontSize=10;" edge="1" parent="1" source="tbl_emp" target="tbl_dept">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fk2" value="fk_guard_shift (RESTRICT)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#475569;fontSize=10;" edge="1" parent="1" source="tbl_guards" target="tbl_shifts">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fk3" value="fk_vis_idtype (RESTRICT)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#475569;fontSize=10;" edge="1" parent="1" source="tbl_visitors" target="tbl_idtypes">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fk4" value="fk_veh_visitor (CASCADE)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#0284c7;fontSize=10;fontStyle=1;" edge="1" parent="1" source="tbl_vehicles" target="tbl_visitors">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fk5" value="fk_bl_visitor (CASCADE)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#e11d48;fontSize=10;fontStyle=1;" edge="1" parent="1" source="tbl_blacklist" target="tbl_visitors">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fk6" value="fk_gp_visitor (RESTRICT)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#15803d;fontSize=10;strokeWidth=2;" edge="1" parent="1" source="tbl_passes" target="tbl_visitors">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fk7" value="fk_gp_host (RESTRICT)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#15803d;fontSize=10;" edge="1" parent="1" source="tbl_passes" target="tbl_emp">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fk8" value="Composite FK (visitor_id, vehicle_id)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#15803d;fontSize=10;fontStyle=1;" edge="1" parent="1" source="tbl_passes" target="tbl_vehicles">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="fk9" value="fk_audit_pass (RESTRICT)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeColor=#ca8a04;fontSize=10;strokeWidth=2;" edge="1" parent="1" source="tbl_audit" target="tbl_passes">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
+

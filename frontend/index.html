@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CVGPS · Database-First Gate Pass Engineering Console v2</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <!-- Top Header Bar -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <span class="brand-badge">MySQL 8.0 · InnoDB · BCNF · v2.0</span>
+      <h1>Corporate Visitor Gate Pass System <span class="sub">Database-First Operations Console</span></h1>
+    </div>
+    <div class="topbar-meta">
+      <span id="health-pill" class="pill pill-ok">● Connecting...</span>
+      <button id="btn-expire-sweep" class="btn btn-ghost btn-sm" title="Invoke CALL sp_expire_stale_passes()">
+        ⏱ Run Expiry Sweep Now
+      </button>
+      <button id="btn-refresh-all" class="btn btn-secondary btn-sm">
+        ⟳ Refresh All Views
+      </button>
+    </div>
+  </header>
+
+  <!-- Live SQL & Database Signal Notification Banner -->
+  <section id="signal-banner" class="signal-banner hidden" role="alert">
+    <div class="signal-header">
+      <div class="signal-title-wrap">
+        <span id="signal-badge" class="signal-badge">SQLSTATE 45000</span>
+        <strong id="signal-title">Database Business Rule Enforced</strong>
+      </div>
+      <button id="btn-close-banner" class="btn-icon" title="Dismiss">✕</button>
+    </div>
+    <p id="signal-message" class="signal-message"></p>
+    <div class="signal-meta">
+      <span id="signal-enforced-by"></span>
+      <code id="signal-sql"></code>
+    </div>
+  </section>
+
+  <!-- Last Executed SQL Bar -->
+  <div class="sql-bar">
+    <span class="sql-bar-label">LAST EXECUTED SQL (as <code>gp_app</code>):</span>
+    <code id="last-sql-code">SELECT * FROM vw_live_campus_occupancy;</code>
+  </div>
+
+  <!-- Main Workspace Grid -->
+  <main class="workspace">
+    <!-- Top Row: 1. Pass Creation | 2. Security Gate Terminal | 3. Edge-Case Scenario Matrix -->
+    <section class="top-cards">
+
+      <!-- CARD 1: Issue Gate Pass (sp_issue_gate_pass) -->
+      <div class="card">
+        <div class="card-header">
+          <h2>1. Issue Gate Pass</h2>
+          <code>CALL sp_issue_gate_pass(...)</code>
+        </div>
+        <form id="form-issue-pass" class="form-grid">
+          <div class="field">
+            <label for="issue-visitor">Visitor (shows active / ex-employee / blacklist flags)</label>
+            <select id="issue-visitor" required></select>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="issue-category">Visitor Category (Rules & Parking Caps)</label>
+              <select id="issue-category" required></select>
+            </div>
+            <div class="field">
+              <label for="issue-host">Host Employee (Department)</label>
+              <select id="issue-host" required></select>
+            </div>
+          </div>
+          <div id="cat-policy-pill" class="cat-policy-pill">
+            Policy: Max 8h | Parking: 240m | Direct Issue
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label for="issue-vehicle">Visitor Vehicle (Composite FK)</label>
+              <select id="issue-vehicle">
+                <option value="">— Walk-In (No Vehicle) —</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="issue-duration">Validity Window (Hours)</label>
+              <input id="issue-duration" type="number" value="4" min="0" max="30" required />
+            </div>
+          </div>
+          <div class="field">
+            <label for="issue-escort">Assigned Escort Employee (Required for VIP / Inspectors)</label>
+            <select id="issue-escort">
+              <option value="">— No Escort Required —</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="issue-purpose">Visit Purpose</label>
+            <input id="issue-purpose" type="text" placeholder="e.g., Q4 Architecture Review" value="Database Architecture Technical Sync" required />
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Issue Atomic Gate Pass</button>
+          </div>
+        </form>
+        <div id="issued-pass-box" class="issued-pass-box hidden">
+          <div>
+            <span class="issued-label">ISSUED PASS CODE:</span>
+            <strong id="issued-pass-code" class="mono-code">GP-XXXXXX</strong>
+            <span id="issued-pass-uuid" class="uuid-sub"></span>
+          </div>
+          <button id="btn-send-to-terminal" class="btn btn-secondary btn-sm">Send to Gate Terminal →</button>
+        </div>
+      </div>
+
+      <!-- CARD 2: Security Gate Terminal (sp_process_gate_checkin / checkout / parking) -->
+      <div class="card">
+        <div class="card-header">
+          <h2>2. Security Gate Terminal</h2>
+          <code>SELECT ... FOR UPDATE</code>
+        </div>
+        <div class="form-grid">
+          <div class="field-row">
+            <div class="field">
+              <label for="term-guard">On-Duty Security Guard</label>
+              <select id="term-guard"></select>
+            </div>
+            <div class="field">
+              <label for="term-checkpoint">Gate Checkpoint</label>
+              <select id="term-checkpoint"></select>
+            </div>
+          </div>
+          <div class="field">
+            <label for="term-pass-code">Scan / Enter Gate Pass Code</label>
+            <input id="term-pass-code" type="text" class="pass-code-input" placeholder="GP-DEMO01" value="GP-DEMO01" maxlength="12" />
+          </div>
+          <div class="terminal-buttons">
+            <button id="btn-checkin" type="button" class="btn btn-success">
+              ▶ Check In (Admit)
+            </button>
+            <button id="btn-checkout" type="button" class="btn btn-warning">
+              ■ Check Out (Exit)
+            </button>
+            <button id="btn-revoke" type="button" class="btn btn-danger-outline" title="CALL sp_revoke_gate_pass">
+              ✕ Revoke
+            </button>
+          </div>
+
+          <!-- Parking Operations in Gate Terminal -->
+          <div class="parking-bar">
+            <div class="field">
+              <label for="term-parking-zone">Parking Zone (Capacity & Type Segregation)</label>
+              <select id="term-parking-zone"></select>
+            </div>
+            <div class="parking-actions">
+              <button id="btn-park" type="button" class="btn btn-secondary btn-sm" title="CALL sp_park_vehicle">
+                🅿 Park Vehicle
+              </button>
+              <button id="btn-exit-park" type="button" class="btn btn-secondary btn-sm" title="CALL sp_exit_parking">
+                ⏏ Exit Parking
+              </button>
+            </div>
+          </div>
+
+          <div id="terminal-result" class="terminal-result">
+            Ready. Select a pass code below or enter <code>GP-DEMO01</code> to test Check-In / Check-Out.
+          </div>
+        </div>
+      </div>
+
+      <!-- CARD 3: One-Click Edge-Case Scenario Launcher -->
+      <div class="card">
+        <div class="card-header">
+          <h2>3. Edge-Case & Trigger Test Matrix</h2>
+          <span class="badge-subtle">Click to load & trigger</span>
+        </div>
+        <div class="scenario-list">
+          <button type="button" class="scenario-chip" data-action="fill-code" data-code="GP-DEMO01">
+            <span class="chip-code ok">GP-DEMO01</span>
+            <span class="chip-desc"><strong>Happy Path:</strong> Valid APPROVED pass (Check In → Park → Check Out)</span>
+          </button>
+          <button type="button" class="scenario-chip" data-action="fill-code" data-code="GP-APPR01">
+            <span class="chip-code warn">GP-APPR01</span>
+            <span class="chip-desc"><strong>Ex-Employee Approval:</strong> PENDING_APPROVAL; host must approve</span>
+          </button>
+          <button type="button" class="scenario-chip" data-action="fill-code" data-code="GP-PARK01">
+            <span class="chip-code ok">GP-PARK01</span>
+            <span class="chip-desc"><strong>New Joinee Parked:</strong> Active in VISITOR-P1 with 12h parking allocation</span>
+          </button>
+          <button type="button" class="scenario-chip" data-action="fill-code" data-code="GP-PKST01">
+            <span class="chip-code err">GP-PKST01</span>
+            <span class="chip-desc"><strong>Parking Overstay:</strong> Courier exceeded 20m delivery limit in SERVICE-BAY</span>
+          </button>
+          <button type="button" class="scenario-chip" data-action="issue-blacklisted">
+            <span class="chip-code err">ERR 50001</span>
+            <span class="chip-desc"><strong>Trigger Block:</strong> Issue pass to blacklisted Rakesh Verma (#2)</span>
+          </button>
+          <button type="button" class="scenario-chip" data-action="fill-code" data-code="GP-BLKD01">
+            <span class="chip-code err">GP-BLKD01</span>
+            <span class="chip-desc"><strong>Post-Issue Blacklist:</strong> Check In fails (50001) + logs DENIED</span>
+          </button>
+          <button type="button" class="scenario-chip" data-action="issue-duplicate">
+            <span class="chip-code err">ERR 50002</span>
+            <span class="chip-desc"><strong>Single Active Pass:</strong> Issue 2nd pass to on-campus Visitor #8</span>
+          </button>
+          <button type="button" class="scenario-chip" data-action="fill-code" data-code="GP-OVER01">
+            <span class="chip-code warn">GP-OVER01</span>
+            <span class="chip-desc"><strong>Campus Overstay:</strong> Check Out flags <code>is_overstay=1</code></span>
+          </button>
+          <button type="button" class="scenario-chip" data-action="fill-code" data-code="GP-EXPD01">
+            <span class="chip-code err">GP-EXPD01</span>
+            <span class="chip-desc"><strong>Expired Window:</strong> Check In fails (50005); Sweep marks EXPIRED</span>
+          </button>
+          <button type="button" class="scenario-chip" data-action="fill-code" data-code="GP-FUTR01">
+            <span class="chip-code err">GP-FUTR01</span>
+            <span class="chip-desc"><strong>Future Pass:</strong> Check In fails (50004 Not Yet Valid)</span>
+          </button>
+          <button type="button" class="scenario-chip" data-action="issue-courier-overdur">
+            <span class="chip-code err">ERR 50013</span>
+            <span class="chip-desc"><strong>Category Cap:</strong> Courier pass exceeding 2h max window</span>
+          </button>
+          <button type="button" class="scenario-chip" data-action="probe-audit-delete">
+            <span class="chip-code err">ERR 1142/50009</span>
+            <span class="chip-desc"><strong>Tamper Probe:</strong> Attempt <code>DELETE FROM access_audit_logs</code></span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bottom Section: Live Database Views & Admin Operations Tabs -->
+    <section class="card monitor-card">
+      <div class="tabs-bar">
+        <div class="tabs-nav">
+          <button class="tab-btn active" data-tab="tab-occupancy">
+            Live Campus Occupancy <span id="badge-occ-count" class="tab-count">0</span>
+          </button>
+          <button class="tab-btn" data-tab="tab-approvals">
+            Host Approvals <span id="badge-appr-count" class="tab-count">0</span>
+          </button>
+          <button class="tab-btn" data-tab="tab-parking">
+            Live Parking <span id="badge-park-count" class="tab-count">0</span>
+          </button>
+          <button class="tab-btn" data-tab="tab-audit">
+            Access Audit Trail (Immutable)
+          </button>
+          <button class="tab-btn" data-tab="tab-analytics">
+            Department Analytics (Window Functions)
+          </button>
+          <button class="tab-btn" data-tab="tab-passes">
+            All Gate Passes
+          </button>
+          <button class="tab-btn" data-tab="tab-admin">
+            Visitor & Blacklist Admin
+          </button>
+        </div>
+        <div class="tabs-controls">
+          <label class="auto-refresh-toggle">
+            <input type="checkbox" id="chk-auto-refresh" checked />
+            Auto-refresh (5s)
+          </label>
+        </div>
+      </div>
+
+      <!-- TAB 1: vw_live_campus_occupancy -->
+      <div id="tab-occupancy" class="tab-pane active">
+        <div class="pane-toolbar">
+          <span>View: <code>SELECT * FROM vw_live_campus_occupancy;</code></span>
+          <span class="hint">Click any active pass code to load it into the Security Gate Terminal for instant Check-Out or Parking.</span>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Pass Code</th>
+                <th>Status Alert</th>
+                <th>Visitor</th>
+                <th>Category</th>
+                <th>Company</th>
+                <th>Masked ID</th>
+                <th>Vehicle & Parking</th>
+                <th>Host & Department</th>
+                <th>Entry Gate & Guard</th>
+                <th>Check-In Time</th>
+                <th>Valid Until</th>
+                <th>Elapsed</th>
+                <th>Remaining</th>
+                <th>Quick Action</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-occupancy"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB 2: vw_pending_approvals (Host Approvals Workflow) -->
+      <div id="tab-approvals" class="tab-pane">
+        <div class="pane-toolbar">
+          <span>View: <code>SELECT * FROM vw_pending_approvals;</code> — Host Employee Authorization Queue</span>
+          <span class="hint">Click <strong>Approve</strong> or <strong>Reject</strong> below. In this deployment console, the guard/host acts as the approving authority.</span>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Pass Code</th>
+                <th>Visitor Name</th>
+                <th>Visitor Flag</th>
+                <th>Category</th>
+                <th>Host Employee (Department)</th>
+                <th>Vehicle</th>
+                <th>Visit Purpose</th>
+                <th>Requested At</th>
+                <th>Validity Window</th>
+                <th>Host Decision</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-approvals"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB 3: vw_live_parking_occupancy & vw_lookup_parking_zones -->
+      <div id="tab-parking" class="tab-pane">
+        <div class="pane-toolbar">
+          <span>Views: <code>SELECT * FROM vw_lookup_parking_zones;</code> & <code>vw_live_parking_occupancy;</code></span>
+        </div>
+        <!-- Parking Zones Grid -->
+        <div id="parking-zones-cards" class="parking-zones-grid"></div>
+
+        <div class="pane-toolbar" style="margin-top: 1.25rem;">
+          <span>Active Parked Vehicles Table (<code>vw_live_parking_occupancy</code>)</span>
+          <span class="hint">Identifies vehicles exceeding category parking limits (e.g. Courier &gt; 20 min).</span>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Parking Alert</th>
+                <th>Pass Code</th>
+                <th>Vehicle Plate</th>
+                <th>Vehicle Type</th>
+                <th>Visitor Name</th>
+                <th>Zone</th>
+                <th>Parked At</th>
+                <th>Parked Duration</th>
+                <th>Allocated Limit</th>
+                <th>Overstay Status</th>
+                <th>Quick Action</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-parking"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB 4: vw_pass_audit_trail -->
+      <div id="tab-audit" class="tab-pane">
+        <div class="pane-toolbar">
+          <span>View: <code>SELECT * FROM vw_pass_audit_trail;</code> (Backed by triggers & procedure DENIED handlers)</span>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Log ID</th>
+                <th>Timestamp (ms)</th>
+                <th>Event Type</th>
+                <th>Pass Code</th>
+                <th>Transition</th>
+                <th>Visitor</th>
+                <th>Guard / Actor</th>
+                <th>Checkpoint</th>
+                <th>Audit Details</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-audit"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB 5: vw_department_visit_analytics & vw_daily_visit_trend -->
+      <div id="tab-analytics" class="tab-pane">
+        <div class="pane-toolbar">
+          <span>View: <code>SELECT * FROM vw_department_visit_analytics;</code> — Window Functions <code>RANK()</code>, <code>DENSE_RANK()</code>, <code>SUM() OVER</code>, <code>ROW_NUMBER()</code></span>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>RANK()</th>
+                <th>DENSE_RANK()</th>
+                <th>Dept Code</th>
+                <th>Department Name</th>
+                <th>Location</th>
+                <th>Total Passes</th>
+                <th>Active Now</th>
+                <th>Completed</th>
+                <th>Overstays</th>
+                <th>Avg Duration</th>
+                <th>Traffic Share %</th>
+                <th>Running Cumulative</th>
+                <th>Peak Arrival Hour</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-analytics-dept"></tbody>
+          </table>
+        </div>
+
+        <div class="pane-toolbar" style="margin-top: 1rem;">
+          <span>View: <code>SELECT * FROM vw_daily_visit_trend;</code> — Uses <code>SUM() OVER</code> & 7-Day Moving Avg</span>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Visit Date</th>
+                <th>Daily Passes</th>
+                <th>Completed</th>
+                <th>Overstays</th>
+                <th>Running Total Passes</th>
+                <th>7-Day Moving Avg</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-analytics-daily"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB 6: vw_pass_directory -->
+      <div id="tab-passes" class="tab-pane">
+        <div class="pane-toolbar">
+          <span>View: <code>SELECT * FROM vw_pass_directory;</code> — Click any pass code to load into Gate Terminal</span>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Pass Code</th>
+                <th>Status</th>
+                <th>Visitor</th>
+                <th>Category</th>
+                <th>Host (Dept)</th>
+                <th>Vehicle</th>
+                <th>Purpose</th>
+                <th>Valid From</th>
+                <th>Valid Until</th>
+                <th>Check-In</th>
+                <th>Check-Out</th>
+                <th>Duration</th>
+                <th>Overstay</th>
+                <th>Approved By</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-passes"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- TAB 7: Visitor Registration & Blacklist Management -->
+      <div id="tab-admin" class="tab-pane">
+        <div class="admin-grid">
+          <!-- Register Visitor Form -->
+          <div class="subcard">
+            <h3>Register New Visitor (<code>CALL sp_register_visitor</code>)</h3>
+            <p class="hint">Hashes raw ID proof server-side via <code>fn_hash_id_proof</code> using secret pepper in <code>sys_secrets</code>.</p>
+            <form id="form-register-visitor" class="form-grid">
+              <div class="field-row">
+                <div class="field">
+                  <label>First Name</label>
+                  <input id="reg-fname" type="text" placeholder="Riya" required />
+                </div>
+                <div class="field">
+                  <label>Last Name</label>
+                  <input id="reg-lname" type="text" placeholder="Sen" required />
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Phone (E.164 CHECK)</label>
+                  <input id="reg-phone" type="text" placeholder="+919876543210" required />
+                </div>
+                <div class="field">
+                  <label>Email (REGEXP CHECK)</label>
+                  <input id="reg-email" type="email" placeholder="riya.sen@partner.io" />
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>ID Proof Type</label>
+                  <select id="reg-id-type"></select>
+                </div>
+                <div class="field">
+                  <label>Raw Government ID Number</label>
+                  <input id="reg-id-num" type="text" placeholder="P9988776" required />
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Company</label>
+                  <input id="reg-company" type="text" placeholder="Partner Corp" />
+                </div>
+                <div class="field">
+                  <label>Vehicle Plate (Optional, XX-00-XX-0000)</label>
+                  <input id="reg-veh-plate" type="text" placeholder="KA-01-AB-1234" />
+                </div>
+              </div>
+              <button type="submit" class="btn btn-primary btn-sm">Register Visitor Atomically</button>
+            </form>
+          </div>
+
+          <!-- Blacklist Management -->
+          <div class="subcard">
+            <h3>Blacklist Visitor (<code>CALL sp_blacklist_visitor</code>)</h3>
+            <form id="form-blacklist" class="form-grid">
+              <div class="field-row">
+                <div class="field">
+                  <label>Visitor</label>
+                  <select id="bl-visitor"></select>
+                </div>
+                <div class="field">
+                  <label>Severity</label>
+                  <select id="bl-severity">
+                    <option value="HIGH">HIGH</option>
+                    <option value="CRITICAL">CRITICAL</option>
+                    <option value="MEDIUM">MEDIUM</option>
+                    <option value="LOW">LOW</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Reason</label>
+                  <input id="bl-reason" type="text" value="Security compliance violation" required />
+                </div>
+                <div class="field">
+                  <label>Duration Hours (blank = permanent)</label>
+                  <input id="bl-hours" type="number" placeholder="Permanent" />
+                </div>
+              </div>
+              <button type="submit" class="btn btn-danger-outline btn-sm">Add to Security Blacklist</button>
+            </form>
+
+            <h4 style="margin: 1rem 0 0.4rem;">Current Blacklist Ledger (<code>vw_blacklist_status</code>)</h4>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Visitor</th>
+                    <th>Severity</th>
+                    <th>State</th>
+                    <th>Reason</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody-blacklist"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

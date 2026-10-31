@@ -1,28 +1,21 @@
-# Compiled class files
-*.class
-cvgps/bin/
+# Python virtual environments & caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
 
-# IDE Settings
+# Environment variables & local credentials
+.env
+*.cnf
+
+# IDE & OS files
 .vscode/
 .idea/
-*.iml
-.settings/
-.classpath
-.project
 *.swp
 *.swo
-
-# OS Files
 .DS_Store
 Thumbs.db
 
-# Build Artifacts
-*.jar
-!cvgps/lib/mysql-connector-j-8.4.0.jar
-*.war
-*.ear
-target/
-out/
-
-# MySQL Data
+# SQL backups
 *.sql.bak
