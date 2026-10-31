@@ -1,0 +1,74 @@
+name: CVGPS Enterprise CI & Automated Database Validation
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  database-and-backend-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0.39
+        env:
+          MYSQL_ROOT_PASSWORD: Admin@123
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Initialize Database Schema and Security Roles
+        run: |
+          # 1. Execute Production Schema (15 Tables, 6 Triggers, 11 Stored Procedures, 10 Views, Security Grants)
+          mysql -h 127.0.0.1 -P 3306 -u root -pAdmin@123 < database/01_production_schema.sql
+          
+          # 2. Seed Deterministic Test Data Matrix
+          mysql -h 127.0.0.1 -P 3306 -u root -pAdmin@123 < database/02_seed_data.sql
+
+      - name: Run 44 Automated Database Business Rule & Trigger Tests
+        run: |
+          echo "Executing database/04_test_business_rules.sql..."
+          mysql -h 127.0.0.1 -P 3306 -u root -pAdmin@123 < database/04_test_business_rules.sql
+
+      - name: Run Multi-Threaded Concurrency & Race-Condition Lock Test
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_DATABASE: cvgps_pro
+          MYSQL_USER: gp_app
+          MYSQL_PASSWORD: CvgpsApp_2026_Secure
+        run: |
+          python backend/concurrency_test.py
+
+      - name: Verify Flask API Service Health Check
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_PORT: 3306
+          MYSQL_DATABASE: cvgps_pro
+          MYSQL_USER: gp_app
+          MYSQL_PASSWORD: CvgpsApp_2026_Secure
+          FLASK_APP: backend/app.py
+        run: |
+          # Start background flask server
+          python -m flask run --port=5000 &
+          sleep 5
+          # Test API Endpoints
+          curl -f http://127.0.0.1:5000/api/lookups
+          curl -f http://127.0.0.1:5000/api/occupancy
+          curl -f http://127.0.0.1:5000/api/parking

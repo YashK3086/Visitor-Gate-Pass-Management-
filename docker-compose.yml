@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0.39
+    container_name: cvgps_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: Admin@123
+    ports:
+      # Expose to friend's host laptop so they can connect MySQL Workbench to localhost:3306!
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # Auto-run schema and seed data on fresh boot
+      - ./database/01_production_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./database/02_seed_data.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pAdmin@123"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    container_name: cvgps_app
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: db
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: cvgps_pro
+      MYSQL_USER: gp_app
+      MYSQL_PASSWORD: CvgpsApp_2026_Secure
+    ports:
+      - "5000:5000"
+
+volumes:
+  mysql_data:
